@@ -1,142 +1,93 @@
-'use client'
-import React, { useEffect, useState } from 'react';
+import React, { useEffect } from 'react';
+import Ping from 'ping.js'; // Ensure this import works properly
 
-export default function Soffice() {
-  const [moduleLoaded, setModuleLoaded] = useState(false);
-  const [fileInputDisabled, setFileInputDisabled] = useState(true);
-
+const Soffice = () => {
   useEffect(() => {
-    const canvas = document.getElementById('qtcanvas');
-
-    const mainPrefix = 'https://cdn.zetaoffice.net/zetaoffice_latest/';
-    // const mainPrefix = '/';
-
-    const loadWasmAndScript = async () => {
-      try {
-        window.Module = {
-          canvas,
-          uno_scripts: ['./zeta.js', './office_thread.js'],
-          locateFile: (path, prefix) => {
-            console.log('Locating file:', path);
-            console.log('Prefix:', mainPrefix);
-            return `${mainPrefix || '/'}${path}`;
-          },
-          onRuntimeInitialized: () => {
-            console.log('WASM and runtime initialized.');
-            setFileInputDisabled(false); // Enable file input once runtime is ready
-          },
-          print: (message) => console.log(message),
-          printErr: (message) => console.error(message),
-        };
-
-        const script = document.createElement('script');
-        script.src = '/soffice.js';
-        script.onload = () => {
-          console.log('soffice.js script loaded.');
-          console.log('FS:', window.FS);
-        };
-        script.onerror = () => {
-          console.error('Failed to load soffice.js');
-        };
-        document.body.appendChild(script);
-      } catch (error) {
-        console.error('Error loading resources:', error);
-      }
+    const loadScript = (src, callback) => {
+      const script = document.createElement('script');
+      script.src = src;
+      script.onload = callback;
+      document.body.appendChild(script);
     };
 
-    if (!moduleLoaded) {
-      loadWasmAndScript();
-      setModuleLoaded(true);
-    }
-  }, [moduleLoaded]);
-
-  const handleFileInput = async (event) => {
-    const file = event.target.files[0];
-    if (!file) return;
-
-    setFileInputDisabled(true);
-
-    try {
-      const port = await window.Module.uno_main;
-      console.log('Obtained port:', port);
-      const fileName = file.name;
-      const extension = fileName.split('.').pop() || '';
-      const filePath = `/tmp/input.${extension}`;
-      const outputPath = '/tmp/output';
-
-      console.log('Writing file to:', filePath);
-      const fileData = new Uint8Array(await file.arrayBuffer());
-      window.FS.writeFile(filePath, fileData);
-
-      console.log('Posting convert message to port:', { cmd: 'convert', name: fileName, from: filePath, to: outputPath });
-      port.postMessage({ cmd: 'convert', name: fileName, from: filePath, to: outputPath });
-
-      port.onmessage = (e) => {
-        console.log('Received message:', e.data);
-        switch (e.data.cmd) {
-          case 'converted':
-            try {
-              const outputData = window.FS.readFile(outputPath);
-              const blob = new Blob([outputData], { type: 'application/pdf' });
-              const url = URL.createObjectURL(blob);
-              const iframe = document.getElementById('frame');
-              iframe.contentWindow.location.replace(url);
-
-              const downloadCheckbox = document.getElementById('download');
-              if (downloadCheckbox.checked) {
-                const link = document.createElement('a');
-                link.href = url;
-                link.download = `${fileName}.pdf`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-              }
-
-              URL.revokeObjectURL(url);
-              window.FS.unlink(filePath);
-              window.FS.unlink(outputPath);
-              console.log('File conversion and handling completed.');
-            } catch (error) {
-              console.error('Error during file handling:', error);
-            }
-            setFileInputDisabled(false);
-            break;
-
-          case 'start':
-            setFileInputDisabled(false);
-            break;
-
-          default:
-            console.error('Unknown command:', e.data.cmd);
-            setFileInputDisabled(false);
-            break;
+    loadScript('./pre_soffice.js', () => {
+      try {
+        if (!window.PingModule) {
+          window.PingModule = Ping; // Assign imported Ping module only if not already set
         }
-      };
-    } catch (error) {
-      console.error('Error handling file input:', error);
-      setFileInputDisabled(false);
-    }
-  };
+      } catch (err) {
+        console.error('Error initializing PingModule:', err);
+      }
+    });
+  }, []);
 
   return (
-    <div>
-      <input
-        type="file"
-        id="input"
-        disabled={fileInputDisabled}
-        onChange={handleFileInput}
-      />
-      <label>
-        <input type="checkbox" id="download" /> Download
-      </label>
-      <iframe
-        id="frame"
-        style={{
-          height: '90vh',
-          width: '100vw',
-        }}
-      ></iframe>
-      <canvas id="qtcanvas" style={{ display: 'none' }}></canvas>
+    <div id="app">
+      <table style={{ width: '1150px', borderSpacing: '10px' }}>
+        <tbody>
+          <tr>
+            <td>
+              <div>
+                <h1>ZetaJS Calc Demo</h1>
+              </div>
+            </td>
+          </tr>
+          <tr>
+            <td>
+              <div
+                onMouseDown={(e) => e.preventDefault()} // Replacing onSelectStart
+                style={{ position: 'relative' }}
+              >
+                <div
+                  id="loadingInfo"
+                  style={{
+                    position: 'absolute',
+                    top: '50%',
+                    left: '50%',
+                    transform: 'translate(-50%, -50%)',
+                  }}
+                >
+                  <div className="spinner"></div>
+                  <br />
+                  <h2>ZetaOffice is loading...</h2>
+                </div>
+                <canvas
+                  id="qtcanvas"
+                  contentEditable="true"
+                  onContextMenu={(e) => e.preventDefault()}
+                  onKeyDown={(e) => e.preventDefault()}
+                  width="900px"
+                  height="450px"
+                  style={{
+                    border: 'none',
+                    padding: '0',
+                    outline: '1px solid #cccccc',
+                  }}
+                />
+              </div>
+            </td>
+            <td style={{ verticalAlign: 'top', width: '250px' }}>
+              <div>
+                <button onClick={() => console.log('Ping button clicked!')}>
+                  Ping
+                </button>
+                &nbsp;
+                <input
+                  type="text"
+                  id="ping_target"
+                  name="ping_target"
+                  defaultValue="https://zetaoffice.net/"
+                />
+              </div>
+              <div>
+                <span id="ping_section">Loading ping tool...</span>
+              </div>
+            </td>
+          </tr>
+        </tbody>
+      </table>
     </div>
   );
-}
+};
+
+export default Soffice;
